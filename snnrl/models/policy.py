@@ -12,13 +12,18 @@ class CategoricalPolicy(torch.nn.Module):
             input_size, hidden_sizes, output_size=action_dim, activation=activation
         )
 
-    def forward(self, inputs):
+    def forward(self, inputs, action=None):
         logits = self.logits(inputs)
         policy = Categorical(logits=logits)
         pi = policy.sample()
         logp_pi = policy.log_prob(pi).squeeze()
 
-        return pi, logp_pi
+        if action is not None:
+            logp = policy.log_prob(action).squeeze()
+        else:
+            logp = None
+
+        return pi, logp, logp_pi
 
 
 class ActorCritic(torch.nn.Module):
@@ -29,11 +34,11 @@ class ActorCritic(torch.nn.Module):
         self.policy = policy
         self.value_function = value_function
 
-    def forward(self, inputs):
-        pi, logp_pi = self.policy(inputs)
-        v = self.value_function(inputs).squeeze()
+    def forward(self, inputs, action=None):
+        pi, logp, logp_pi = self.policy(inputs, action)
+        v = self.value_function(inputs)
 
-        return pi, logp_pi, v
+        return pi, logp, logp_pi, v
 
 
 if __name__ == "__main__":

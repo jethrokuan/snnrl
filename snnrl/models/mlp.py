@@ -26,7 +26,12 @@ class MLP(torch.nn.Module):
         self._output_size = output_size
 
     def forward(self, input_features):
-        return self.model(input_features)
+        res = self.model(input_features)
+
+        if self._output_size == 1:
+            return res.squeeze()
+        else:
+            return res
 
     @property
     def output_size(self):
