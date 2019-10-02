@@ -1,6 +1,8 @@
 from snnrl.models.policy import CategoricalPolicy, MLP, ActorCritic
 from snnrl.algos.vpg.buffer import VPGBuffer
 
+from snnrl.utils import save_checkpoint
+
 import gym
 import torch
 import torch.nn.functional as F
@@ -12,6 +14,7 @@ ex.observers.append(MongoObserver.create())
 
 @ex.config
 def cfg():
+    save_freq = 10
     steps_per_epoch = 4000
     num_epochs = 80
     gamma = 0.99
@@ -36,6 +39,7 @@ def main(steps_per_epoch,
          policy,
          vf,
          save_loc,
+         save_freq,
          _run):
     env = gym.make(gym_env)
     obs_dim = env.observation_space.shape
@@ -90,6 +94,7 @@ def main(steps_per_epoch,
         for t in range(steps_per_epoch):
             a, _, logp_t, v_t = actor_critic(torch.Tensor(o.reshape(1, -1)))
             buf.store(o, a.detach().numpy(), r, v_t.item(), logp_t.detach().numpy())
+            _run.log_scalar("training.vvals", v_t.item())
             o, r, d, _ = env.step(a.detach().numpy()[0])
             ep_ret += r
             ep_len += 1
@@ -101,9 +106,13 @@ def main(steps_per_epoch,
                 # if trajectory didn't reach terminal state, bootstrap value target
                 last_val = r if d else actor_critic.value_function(torch.Tensor(o.reshape(1,-1))).item()
                 buf.finish_path(last_val)
+                if terminal:
+                    _run.log_scalar("training.ep_ret", ep_ret)
+                    _run.log_scalar("training.ep_len", ep_len)
                 o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
 
         actor_critic.train()
         update()
 
-    torch.save(actor_critic.state_dict(), "{}/{}".format(save_loc, _run._id))
+        if epoch % save_freq == 0 or epoch == num_epochs -1:
+            save_checkpoint(actor_critic, save_loc, epoch)
