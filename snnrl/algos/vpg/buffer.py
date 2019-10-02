@@ -1,10 +1,7 @@
-from snnrl.models.policy import CategoricalPolicy, MLP, ActorCritic
+"""The buffer to store trajectories and related information."""
 
-import gym
 import numpy as np
 import scipy.signal
-import torch
-import torch.nn.functional as F
 
 class VPGBuffer:
     """
@@ -101,68 +98,3 @@ class VPGBuffer:
             x2]
         """
         return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
-
-steps_per_epoch=4000
-gamma=0.99
-lam=1
-max_ep_len=100
-
-if __name__ == "__main__":
-    env = gym.make("CartPole-v0")
-    obs_dim = env.observation_space.shape
-    act_dim = env.action_space.shape
-
-    actor_critic = ActorCritic(
-        policy=CategoricalPolicy(obs_dim[0], [30, 60], env.action_space.n),
-        value_function=MLP(obs_dim[0], [30, 60], 1)
-    )
-
-    buf = VPGBuffer(obs_dim, act_dim, steps_per_epoch, gamma, lam)
-
-    train_pi = torch.optim.Adam(actor_critic.policy.parameters(), lr=0.1)
-    train_v = torch.optim.Adam(actor_critic.value_function.parameters(), lr=0.1)
-
-    def update():
-        obs, act, adv, ret, logp_old = [torch.Tensor(x) for x in buf.get()]
-
-        _, logp, _ = actor_critic.policy(obs, act)
-        ent = (-logp).mean()
-
-        pi_loss = -(logp).mean()
-        pi_loss = (-logp * adv).mean()
-
-        train_pi.zero_grad()
-        pi_loss.backward()
-        print(pi_loss)
-        train_pi.step()
-
-        for _ in range(400):
-            v = actor_critic.value_function(obs).squeeze()
-            v_loss = F.mse_loss(v, ret)
-
-            train_v.zero_grad()
-            v_loss.backward()
-            train_v.step()
-
-    o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
-
-    for epoch in range(100):
-        actor_critic.eval()
-        for t in range(steps_per_epoch):
-            a, _, logp_t, v_t = actor_critic(torch.Tensor(o.reshape(1, -1)))
-            buf.store(o, a.detach().numpy(), r, v_t.item(), logp_t.detach().numpy())
-            o, r, d, _ = env.step(a.detach().numpy()[0])
-            ep_ret += r
-            ep_len += 1
-
-            terminal = d or (ep_len == max_ep_len)
-            if terminal or (t==steps_per_epoch-1):
-                if not(terminal):
-                    print('Warning: trajectory cut off by epoch at %d steps.'%ep_len)
-                # if trajectory didn't reach terminal state, bootstrap value target
-                last_val = r if d else actor_critic.value_function(torch.Tensor(o.reshape(1,-1))).item()
-                buf.finish_path(last_val)
-                o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
-
-        actor_critic.train()
-        update()
