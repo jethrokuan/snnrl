@@ -115,4 +115,4 @@ def main(steps_per_epoch,
         update()
 
         if epoch % save_freq == 0 or epoch == num_epochs -1:
-            save_checkpoint(actor_critic, save_loc, epoch)
+            save_checkpoint({"env": gym_env}, actor_critic, save_loc, epoch)

@@ -1,24 +1,17 @@
 import gym
 import torch
+import argparse
 from snnrl.models.policy import ActorCritic, CategoricalPolicy, MLP
 
-policy = {
-    "hidden": [32, 64]
-}
-vf = {
-    "hidden": [32, 64]
-}
+parser = argparse.ArgumentParser()
+parser.add_argument("--checkpoint", help="Path to checkpoint.", type=str, required=True)
+args = parser.parse_args()
 
-env = gym.make("CartPole-v0")
+checkpoint = torch.load(args.checkpoint)
+actor_critic = checkpoint["model"]
+env = gym.make(checkpoint["env"])
 obs_dim = env.observation_space.shape
 act_dim = env.action_space.shape
-
-actor_critic = ActorCritic(
-        policy=CategoricalPolicy(obs_dim[0], policy["hidden"], env.action_space.n),
-        value_function=MLP(obs_dim[0], vf["hidden"], 1)
-    )
-
-actor_critic.load_state_dict(torch.load("data/5"))
 actor_critic.eval()
 
 for i in range(100):
