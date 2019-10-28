@@ -96,6 +96,7 @@ class ImageCartPoleEnv(gym.Env):
         return [seed]
 
     def step(self, action):
+        self.last_screen = self.current_screen
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         state = self.state
         x, x_dot, theta, theta_dot = state
@@ -134,14 +135,15 @@ class ImageCartPoleEnv(gym.Env):
             self.steps_beyond_done += 1
             reward = 0.0
 
-        screen = self.get_screen()
-        return screen, reward, done, {}
+        self.current_screen = self.get_screen()
+        return self.current_screen - self.last_screen, reward, done, {}
 
     def reset(self):
         self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
         self.steps_beyond_done = None
-        screen = self.get_screen()
-        return screen
+        self.last_screen = self.get_screen()
+        self.current_screen = self.get_screen()
+        return self.current_screen - self.last_screen
 
     def render(self, mode='human'):
         screen_width = 600
@@ -228,5 +230,4 @@ class ImageCartPoleEnv(gym.Env):
         # (this doesn't require a copy)
         screen = np.ascontiguousarray(screen, dtype=np.float32) / 255
         screen = torch.from_numpy(screen)
-        # Resize, and add a batch dimension (BCHW)
         return self.resize(screen)
