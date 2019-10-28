@@ -1,4 +1,4 @@
-from snnrl.models.policy import CategoricalPolicy, MLP, ActorCritic
+from snnrl.models.policy import CategoricalPolicy, MLP, ActorCritic, CNN
 from snnrl.algos.vpg.buffer import VPGBuffer
 
 from snnrl.utils import save_checkpoint
@@ -15,12 +15,13 @@ ex.observers.append(MongoObserver.create())
 @ex.config
 def cfg():
     save_freq = 10
-    steps_per_epoch = 4000
-    num_epochs = 80
+    steps_per_epoch = 1000
+    num_epochs = 200
     gamma = 0.99
+    device = "cuda"
     lam = 1
-    max_ep_len = 400
-    gym_env = "CartPole-v0"
+    max_ep_len = 100
+    gym_env = "ImageCartPole-v0"
     policy = {
         "hidden": [32, 64]
     }
@@ -40,23 +41,31 @@ def main(steps_per_epoch,
          vf,
          save_loc,
          save_freq,
+         device,
          _run):
+    device = torch.device(device)
     env = gym.make(gym_env)
-    obs_dim = env.observation_space.shape
+    env.reset()
+    screen = env.get_screen()
+    _, screen_height, screen_width = screen.shape
+
+    obs_dim = screen.shape
     act_dim = env.action_space.shape
 
     actor_critic = ActorCritic(
-        policy=CategoricalPolicy(obs_dim[0], policy["hidden"], env.action_space.n),
-        value_function=MLP(obs_dim[0], vf["hidden"], 1)
+        policy=CategoricalPolicy((screen_height, screen_width), policy["hidden"], env.action_space.n, model="CNN"),
+        value_function=CNN(screen_height, screen_width, 1)
     )
+
+    actor_critic.to(device=device)
 
     buf = VPGBuffer(obs_dim, act_dim, steps_per_epoch, gamma, lam)
 
-    train_pi = torch.optim.Adam(actor_critic.policy.parameters(), lr=0.1)
-    train_v = torch.optim.Adam(actor_critic.value_function.parameters(), lr=0.1)
+    train_pi = torch.optim.Adam(actor_critic.policy.parameters(), lr=0.01)
+    train_v = torch.optim.Adam(actor_critic.value_function.parameters(), lr=0.01)
 
     def update():
-        obs, act, adv, ret, logp_old = [torch.Tensor(x) for x in buf.get()]
+        obs, act, adv, ret, logp_old = [torch.Tensor(x).to(device) for x in buf.get()]
 
         _, logp, _ = actor_critic.policy(obs, act)
         ent = (-logp).mean()
@@ -79,7 +88,7 @@ def main(steps_per_epoch,
         # Capture changes from update
         _, logp, _, v = actor_critic(obs, act)
         pi_l_new = -(logp * adv).mean()
-        v_l_new = F.mse_loss(v, ret)
+        v_l_new = F.mse_loss(v.squeeze(), ret)
         kl = (logp_old - logp).mean()
         _run.log_scalar("training.piloss", pi_loss.item())
         _run.log_scalar("training.vf_loss", v_loss.item())
@@ -92,10 +101,11 @@ def main(steps_per_epoch,
     for epoch in range(num_epochs):
         actor_critic.eval()
         for t in range(steps_per_epoch):
-            a, _, logp_t, v_t = actor_critic(torch.Tensor(o.reshape(1, -1)))
-            buf.store(o, a.detach().numpy(), r, v_t.item(), logp_t.detach().numpy())
+            a, _, logp_t, v_t = actor_critic(o.unsqueeze(0).to(device))
+            buf.store(o, a.cpu().detach().numpy(), r, v_t.item(), logp_t.cpu().detach().numpy())
             _run.log_scalar("training.vvals", v_t.item())
-            o, r, d, _ = env.step(a.detach().numpy()[0])
+            action = a.cpu().detach().numpy()[0]
+            o, r, d, _ = env.step(action)
             ep_ret += r
             ep_len += 1
 
@@ -104,7 +114,7 @@ def main(steps_per_epoch,
                 if not(terminal):
                     print('Warning: trajectory cut off by epoch at %d steps.'%ep_len)
                 # if trajectory didn't reach terminal state, bootstrap value target
-                last_val = r if d else actor_critic.value_function(torch.Tensor(o.reshape(1,-1))).item()
+                last_val = r if d else actor_critic.value_function(o.unsqueeze(0).to(device)).item()
                 buf.finish_path(last_val)
                 if terminal:
                     _run.log_scalar("training.ep_ret", ep_ret)

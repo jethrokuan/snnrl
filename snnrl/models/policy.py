@@ -3,14 +3,21 @@
 import torch
 from torch.distributions import Categorical
 from snnrl.models.mlp import MLP
-
+from snnrl.models.cnn import CNN
 
 class CategoricalPolicy(torch.nn.Module):
-    def __init__(self, input_size, hidden_sizes, action_dim, activation=torch.nn.Tanh):
+    def __init__(self, input_size, hidden_sizes, action_dim, activation=torch.nn.Tanh, model="MLP"):
         super(CategoricalPolicy, self).__init__()
-        self.logits = MLP(
-            input_size, hidden_sizes, output_size=action_dim, activation=activation
-        )
+        if model == "MLP":
+            self.logits = MLP(
+                input_size, hidden_sizes, output_size=action_dim, activation=activation
+            )
+        elif model == "CNN":
+            self.logits = CNN(
+                input_size[0], input_size[1], action_dim)
+        else:
+            raise Exception(f"Invalid model type: {model}")
+
 
     def forward(self, inputs, action=None):
         logits = self.logits(inputs)
