@@ -1,0 +1,22 @@
+- model: cartpole-ann
+  description: Train a simple ANN on the base cartpole environment
+  operations:
+    train:
+      description: Train ANN model
+      main: snnrl/algos/vpg/vpg --save_dir data
+      output-scalars: no
+      flags-import-skip: [save_dir]
+      compare:
+        - avg_ep_ret/train as ep_ret
+        - avg_ep_len/train as ep_len
+
+- model: cartpole-snn
+  description: Train a simple SNN on the base cartpole environment
+  operations:
+    train:
+      description: Train SNN model
+      main: snnrl/algos/vpg/snn_vpg
+      output-scalars: no
+      compare:
+        - avg_ep_ret/train as ep_ret
+        - avg_ep_len/train as ep_len
