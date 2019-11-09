@@ -13,3 +13,17 @@ register(
     max_episode_steps=500,
     reward_threshold=475.0,
 )
+
+register(
+    id='ImageDiffCartPole-v0',
+    entry_point='snnrl.envs:ImageDiffCartPoleEnv',
+    max_episode_steps=200,
+    reward_threshold=195.0,
+)
+
+register(
+    id='ImageDiffCartPole-v1',
+    entry_point='snnrl.envs:ImageDiffCartPoleEnv',
+    max_episode_steps=500,
+    reward_threshold=475.0,
+)

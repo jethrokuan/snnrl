@@ -13,7 +13,7 @@ from PIL import Image
 import numpy as np
 import torchvision.transforms as T
 
-class ImageCartPoleEnv(gym.Env):
+class ImageDiffCartPoleEnv(gym.Env):
     """
     Description:
         A pole is attached by an un-actuated joint to a cart, which moves along a frictionless track. The pendulum starts upright, and the goal is to prevent it from falling over by increasing and reducing the cart's velocity.
@@ -96,6 +96,7 @@ class ImageCartPoleEnv(gym.Env):
         return [seed]
 
     def step(self, action):
+        self.last_screen = self.current_screen
         assert self.action_space.contains(action), "%r (%s) invalid"%(action, type(action))
         state = self.state
         x, x_dot, theta, theta_dot = state
@@ -134,12 +135,15 @@ class ImageCartPoleEnv(gym.Env):
             self.steps_beyond_done += 1
             reward = 0.0
 
-        return self.get_screen(), reward, done, {}
+        self.current_screen = self.get_screen()
+        return self.current_screen - self.last_screen, reward, done, {}
 
     def reset(self):
         self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
         self.steps_beyond_done = None
-        return self.get_screen()
+        self.last_screen = self.get_screen()
+        self.current_screen = self.get_screen()
+        return self.current_screen - self.last_screen
 
     def render(self, mode='human'):
         screen_width = 600
