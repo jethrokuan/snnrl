@@ -1,5 +1,6 @@
 """Utility functions for model."""
 
+import os
 import os.path as osp
 import shutil
 import torch
