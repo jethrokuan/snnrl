@@ -11,17 +11,17 @@ class SNNCategoricalPolicy(torch.nn.Module):
         self.slayer = snn.layer(params["neuron"], params["simulation"])
         # self.encoder = CartPoleEncoder(200)
         self.encoder = ImageEncoder()
-        self.fc1 = self.slayer.dense((input_size[0] * input_size[1] * 3), 300)
-        self.fc2 = self.slayer.dense(300, 2)  # output of 2 classes
+        self.fc1 = self.slayer.dense((input_size[0] * input_size[1] * 3), 50)
+        self.fc2 = self.slayer.dense(50, 2)  # output of 2 classes
 
     def _encode(self, o, ts):
-        encoded = self.encoder(o * 255, ts)
+        encoded = self.encoder(o, ts)
         # squeeze all into channel dimension
         encoded = encoded.reshape(-1, 1, 1, encoded.shape[-1])
         return encoded
 
     def forward(self, inputs, action=None):
-        encoded_input = torch.stack([self._encode(o, 300) for o in inputs]).to(
+        encoded_input = torch.stack([self._encode(o, 50) for o in inputs]).to(
             device=torch.device("cuda")
         )
         sl1 = self.slayer.spike(self.slayer.psp(self.fc1(encoded_input)))
