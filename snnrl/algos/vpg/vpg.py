@@ -14,6 +14,7 @@ import torch.nn.functional as F
 import argparse
 import json
 import sys
+from statistics import mean, variance
 
 parser = argparse.ArgumentParser(description="Vanilla Policy Gradients")
 
@@ -40,7 +41,9 @@ parser.add_argument(
     help="Device to run VPG on.",
     required=True,
 )
-parser.add_argument("--env", type=str, help="Gym environment to load.", required=True)
+parser.add_argument(
+    "--gym_env", type=str, help="Gym environment to load.", required=True
+)
 parser.add_argument(
     "--policy_hidden",
     type=str,
@@ -48,7 +51,7 @@ parser.add_argument(
     required=True,
 )
 parser.add_argument(
-    "--policy_lr", type=str, help="Policy learning rate.", required=True
+    "--policy_lr", type=float, help="Policy learning rate.", required=True
 )
 parser.add_argument(
     "--vf_hidden",
@@ -57,8 +60,16 @@ parser.add_argument(
     required=True,
 )
 parser.add_argument(
-    "--vf_lr", type=str, help="Value Function learning rate.", required=True
+    "--vf_lr", type=float, help="Value Function learning rate.", required=True
 )
+
+parser.add_argument(
+    "--vf_iters",
+    type=int,
+    help="Number of iterations for training the value function.",
+    required=True,
+)
+
 parser.add_argument(
     "--save_dir",
     type=str,
@@ -67,18 +78,25 @@ parser.add_argument(
     required=True,
 )
 parser.add_argument(
-    "--gae_gamma", type=int, help="Gamma for GAE-lambda.", required=True
+    "--gae_gamma", type=float, help="Gamma for GAE-lambda.", required=True
 )
-parser.add_argument("--gae_lam", type=int, help="Lambda for GAE-lambda.", required=True)
+parser.add_argument(
+    "--gae_lam", type=float, help="Lambda for GAE-lambda.", required=True
+)
 
 args = parser.parse_args(sys.argv[1:])
 
-policy_hidden = json.loads(args.policy_hidden)
-vf_hidden = json.loads(args.vf_hidden)
+
+def load_arr(arg):
+    return map(int, arg.split(","))
+
+
+policy_hidden = load_arr(args.policy_hidden)
+vf_hidden = load_arr(args.vf_hidden)
 
 writer = SummaryWriter(".")
 device = torch.device(args.device)
-env = gym.make(args.env)
+env = gym.make(args.gym_env)
 env.reset()
 screen = env.get_screen()
 _, screen_height, screen_width = screen.shape
@@ -114,7 +132,7 @@ def update(epoch):
     pi_loss.backward()
     train_pi.step()
 
-    for _ in range(400):
+    for _ in range(args.vf_iters):
         v = actor_critic.value_function(obs).squeeze()
         v_loss = F.mse_loss(v, ret)
 
@@ -137,10 +155,10 @@ def update(epoch):
 o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
 
 # Training loop
-for epoch in range(num_epochs):
+for epoch in range(args.epochs):
     actor_critic.eval()
-    total_ep_ret, total_ep_len, num_ep = 0, 0, 0
-    for t in range(steps_per_epoch):
+    ep_ret_lst, ep_len_lst = [], []
+    for t in range(args.steps_per_epoch):
         a, _, logp_t, v_t = actor_critic(o.unsqueeze(0).to(device))
         buf.store(
             o, a.cpu().detach().numpy(), r, v_t.item(), logp_t.cpu().detach().numpy()
@@ -150,8 +168,8 @@ for epoch in range(num_epochs):
         ep_ret += r
         ep_len += 1
 
-        terminal = d or (ep_len == max_ep_len)
-        if terminal or (t == steps_per_epoch - 1):
+        terminal = d or (ep_len == args.max_ep_length)
+        if terminal or (t == args.steps_per_epoch - 1):
             if not (terminal):
                 print("Warning: trajectory cut off by epoch at %d steps." % ep_len)
             # if trajectory didn't reach terminal state, bootstrap value target
@@ -161,16 +179,17 @@ for epoch in range(num_epochs):
                 else actor_critic.value_function(o.unsqueeze(0).to(device)).item()
             )
             buf.finish_path(last_val)
-            total_ep_len += ep_len
-            total_ep_ret += ep_ret
-            num_ep += 1
+            ep_len_lst.append(ep_len)
+            ep_ret_lst.append(ep_ret)
             o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
 
-    writer.add_scalar("avg_ep_ret/train", total_ep_ret / num_ep, epoch)
-    writer.add_scalar("avg_ep_len/train", total_ep_len / num_ep, epoch)
+    writer.add_scalar("ep_ret_mean/train", mean(ep_ret_lst), epoch)
+    writer.add_scalar("ep_len_mean/train", mean(ep_len_lst), epoch)
+    writer.add_scalar("ep_ret_var/train", variance(ep_ret_lst), epoch)
+    writer.add_scalar("ep_len_var/train", variance(ep_len_lst), epoch)
     actor_critic.train()
 
     update(epoch)
 
-    if epoch % save_freq == 0 or epoch == num_epochs - 1:
-        save_checkpoint({"env": gym_env}, actor_critic, save_loc, epoch)
+    if epoch % args.save_every == 0 or epoch == args.epochs - 1:
+        save_checkpoint({"env": args.gym_env}, actor_critic, args.save_dir, epoch)

@@ -6,17 +6,69 @@
       main: snnrl/algos/vpg/vpg --save_dir data
       output-scalars: no
       flags-import-skip: [save_dir]
+      flags:
+        device:
+          default: cuda
+        gym_env:
+          default: "ImageCartPole-v0"
+        epochs:
+          default: 50
+        steps_per_epoch:
+          default: 4000
+        max_ep_length:
+          default: 1000
+        policy_lr:
+          default: 3e-4
+        vf_lr:
+          default: 1e-3
+        vf_iters:
+          default: 400
+        gae_gamma:
+          default: 0.99
+        gae_lam:
+          default: 0.95
+        policy_hidden:
+          default: "32,64"
+        vf_hidden:
+          default: "32,64"
       compare:
         - avg_ep_ret/train as ep_ret
         - avg_ep_len/train as ep_len
 
 - model: cartpole-snn
-  description: Train a simple SNN on the base cartpole environment
+  description: Train a simple SNN on the image cartpole environment
   operations:
     train:
       description: Train SNN model
-      main: snnrl/algos/vpg/snn_vpg
+      main: snnrl/algos/vpg/snn_vpg --save_dir data
       output-scalars: no
+      flags-import-skip: [save_dir]
+      flags:
+        device:
+          default: cuda
+        gym_env:
+          default: "ImageCartPole-v0"
+        epochs:
+          default: 50
+        steps_per_epoch:
+          default: 4000
+        max_ep_length:
+          default: 1000
+        policy_lr:
+          default: 3e-4
+        vf_lr:
+          default: 1e-3
+        vf_iters:
+          default: 400
+        gae_gamma:
+          default: 0.99
+        gae_lam:
+          default: 0.95
+        snn_config:
+          default: "./configs/snn.json"
+      requires:
+        - file: snnrl/configs
+          path: .
       compare:
         - avg_ep_ret/train as ep_ret
         - avg_ep_len/train as ep_len

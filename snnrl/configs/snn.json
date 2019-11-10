@@ -1,0 +1,12 @@
+{
+  "neuron": {
+    "type": "SRMALPHA",
+    "theta": 10,
+    "tauSr": 10.0,
+    "tauRef": 1.0,
+    "scaleRef": 2,
+    "tauRho": 1,
+    "scaleRho": 1
+  },
+  "simulation": {"Ts": 1.0, "tSample": 300, "nSample": 1}
+}

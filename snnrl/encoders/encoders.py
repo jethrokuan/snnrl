@@ -3,16 +3,17 @@ import torch
 
 
 def poisson(datum, time, dt=1.0):
+    device = datum.device
     assert (datum >= 0).all(), "Inputs must be non-negative"
     shape, size = datum.shape, datum.numel()
     datum = datum.view(-1)
     time = int(time / dt)
 
-    rate = torch.zeros(size)
+    rate = torch.zeros(size).to(device)
     rate[datum != 0] = 1 / datum[datum != 0] * (1000 / dt)
 
     dist = torch.distributions.Poisson(rate=rate)
-    intervals = dist.sample(sample_shape=torch.Size([time + 1]))
+    intervals = dist.sample(sample_shape=torch.Size([time + 1])).to(device)
     intervals[:, datum != 0] = (intervals[:, datum != 0] == 0).float()
 
     times = torch.cumsum(intervals, dim=0).long()
@@ -59,3 +60,10 @@ class CartPoleEncoder:
         ]
         encoded_obs = torch.Tensor(obs_mag + obs_vals).reshape(-1, 1, 1)
         return poisson(encoded_obs, timesteps)
+
+
+class ImageEncoder:
+    """ Flattens and encodes images"""
+
+    def __call__(self, obs, ts):
+        return poisson(obs, ts)

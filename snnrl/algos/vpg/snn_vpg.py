@@ -1,135 +1,186 @@
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
+
 from snnrl.models.snn_policy import SNNCategoricalPolicy
-from snnrl.models.policy import CategoricalPolicy, MLP, ActorCritic
+from snnrl.models.policy import ActorCritic, CNN
 from snnrl.algos.vpg.buffer import VPGBuffer
+from torch.utils.tensorboard import SummaryWriter
 
 from snnrl.utils import save_checkpoint
 
 import gym
 import torch
 import torch.nn.functional as F
-from sacred import Experiment
-from sacred.observers import MongoObserver
+import argparse
+import json
+import sys
+from statistics import mean, variance
 
-ex = Experiment("snn_vpg")
-ex.observers.append(MongoObserver.create())
 
-@ex.config
-def cfg():
-    save_freq = 10
-    steps_per_epoch = 4000
-    num_epochs = 80
-    gamma = 0.99
-    lam = 1
-    max_ep_len = 400
-    gym_env = "CartPole-v0"
-    snn_params = {
-        "neuron": {
-            "type": "SRMALPHA",
-            "theta": 10,
-            "tauSr": 10.0,
-            "tauRef": 1.0,
-            "scaleRef": 2,
-            "tauRho": 1,
-            "scaleRho": 1
-        },
-        "simulation": {
-            "Ts": 1.0,
-            "tSample": 300,
-            "nSample": 1
-        }
-    }
-    vf = {
-        "hidden": [32, 64]
-    }
-    save_loc = "data"
+parser = argparse.ArgumentParser(description="Vanilla Policy Gradients")
 
-@ex.automain
-def main(steps_per_epoch,
-         num_epochs,
-         gamma,
-         lam,
-         max_ep_len,
-         gym_env,
-         snn_params,
-         vf,
-         save_loc,
-         save_freq,
-         _run):
-    device = torch.device("cuda")
-    env = gym.make(gym_env)
-    obs_dim = env.observation_space.shape
-    act_dim = env.action_space.shape
+parser.add_argument(
+    "--save_every",
+    type=int,
+    default=10,
+    help="Frequency of saving the trained model.",
+    required=True,
+)
+parser.add_argument(
+    "--epochs", type=int, help="Number of epochs to train the model for.", required=True
+)
+parser.add_argument(
+    "--steps_per_epoch", type=int, help="Number of steps per epoch.", required=True
+)
+parser.add_argument(
+    "--max_ep_length", type=int, help="Maximum length of episode.", required=True
+)
+parser.add_argument(
+    "--device",
+    type=str,
+    choices=["cuda", "cpu"],
+    help="Device to run VPG on.",
+    required=True,
+)
+parser.add_argument(
+    "--gym_env", type=str, help="Gym environment to load.", required=True
+)
 
-    actor_critic = ActorCritic(
-        policy=SNNCategoricalPolicy(snn_params),
-        value_function=MLP(obs_dim[0], vf["hidden"], 1)
-    )
+parser.add_argument(
+    "--snn_config", type=str, help="Location to SNN params.", required=True
+)
 
-    actor_critic.to(device=device)
+parser.add_argument(
+    "--policy_lr", type=float, help="Policy learning rate.", required=True
+)
 
-    buf = VPGBuffer(obs_dim, act_dim, steps_per_epoch, gamma, lam)
+parser.add_argument(
+    "--vf_lr", type=float, help="Value Function learning rate.", required=True
+)
 
-    train_pi = torch.optim.Adam(actor_critic.policy.parameters(), lr=0.1)
-    train_v = torch.optim.Adam(actor_critic.value_function.parameters(), lr=0.1)
+parser.add_argument(
+    "--vf_iters",
+    type=int,
+    help="Number of iterations for training the value function.",
+    required=True,
+)
 
-    def update():
-        device = torch.device("cuda")
-        obs, act, adv, ret, logp_old = [torch.Tensor(x).to(device=device) for x in buf.get()]
-        _, logp, _ = actor_critic.policy(obs, act)
-        ent = (-logp).mean()
+parser.add_argument(
+    "--save_dir",
+    type=str,
+    default="data",
+    help="Directory to export model data.",
+    required=True,
+)
+parser.add_argument(
+    "--gae_gamma", type=float, help="Gamma for GAE-lambda.", required=True
+)
+parser.add_argument(
+    "--gae_lam", type=float, help="Lambda for GAE-lambda.", required=True
+)
 
-        pi_loss = -(logp).mean()
-        pi_loss = (-logp * adv).mean()
+args = parser.parse_args(sys.argv[1:])
 
-        train_pi.zero_grad()
-        pi_loss.backward()
-        train_pi.step()
+with open(args.snn_config) as f:
+    snn_params = json.load(f)
 
-        for _ in range(400):
-            v = actor_critic.value_function(obs).squeeze()
-            v_loss = F.mse_loss(v, ret)
 
-            train_v.zero_grad()
-            v_loss.backward()
-            train_v.step()
+writer = SummaryWriter(".")
+device = torch.device(args.device)
+env = gym.make(args.gym_env)
+env.reset()
+screen = env.get_screen()
+_, screen_height, screen_width = screen.shape
 
-        # Capture changes from update
-        _, logp, _, v = actor_critic(obs, act)
-        pi_l_new = -(logp * adv).mean()
-        v_l_new = F.mse_loss(v, ret)
-        kl = (logp_old - logp).mean()
-        _run.log_scalar("training.piloss", pi_loss.item())
-        _run.log_scalar("training.vf_loss", v_loss.item())
-        _run.log_scalar("training.kl", kl.item())
-        _run.log_scalar("training.ent", ent.item())
-        _run.log_scalar("training.delta_pi", (pi_l_new - pi_loss).item())
+obs_dim = screen.shape
+act_dim = env.action_space.shape
 
-    o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
+actor_critic = ActorCritic(
+    policy=SNNCategoricalPolicy((screen_height, screen_width), snn_params),
+    value_function=CNN(screen_height, screen_width, 1),
+)
 
-    for epoch in range(num_epochs):
-        actor_critic.eval()
-        for t in range(steps_per_epoch):
-            a, _, logp_t, v_t = actor_critic(torch.Tensor(o.reshape(1, -1)).to(device=device))
-            buf.store(o, a.cpu().detach().numpy(), r, v_t.item(), logp_t.cpu().detach().numpy())
-            _run.log_scalar("training.vvals", v_t.item())
-            o, r, d, _ = env.step(a.cpu().detach().numpy()[0])
-            ep_ret += r
-            ep_len += 1
+actor_critic.to(device=device)
 
-            terminal = d or (ep_len == max_ep_len)
-            if terminal or (t==steps_per_epoch-1):
-                if not(terminal):
-                    print('Warning: trajectory cut off by epoch at %d steps.'%ep_len)
-                # if trajectory didn't reach terminal state, bootstrap value target
-                last_val = r if d else actor_critic.value_function(torch.Tensor(o.reshape(1,-1)).to(device=device)).item()
-                buf.finish_path(last_val)
-                if terminal:
-                    _run.log_scalar("training.ep_ret", ep_ret)
-                    _run.log_scalar("training.ep_len", ep_len)
-                o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
+buf = VPGBuffer(obs_dim, act_dim, args.steps_per_epoch, args.gae_gamma, args.gae_lam)
 
-        actor_critic.train()
-        update()
+train_pi = torch.optim.Adam(actor_critic.policy.parameters(), lr=args.policy_lr)
+train_v = torch.optim.Adam(actor_critic.value_function.parameters(), lr=args.vf_lr)
 
-        if epoch % save_freq == 0 or epoch == num_epochs -1:
-            save_checkpoint({"env": gym_env}, actor_critic, save_loc, epoch)
+
+def update(epoch):
+    obs, act, adv, ret, logp_old = [torch.Tensor(x).to(device) for x in buf.get()]
+
+    _, logp, _ = actor_critic.policy(obs, act)
+    ent = (-logp).mean()
+
+    pi_loss = -(logp).mean()
+    pi_loss = (-logp * adv).mean()
+
+    train_pi.zero_grad()
+    pi_loss.backward()
+    train_pi.step()
+
+    for _ in range(args.vf_iters):
+        v = actor_critic.value_function(obs).squeeze()
+        v_loss = F.mse_loss(v, ret)
+
+        train_v.zero_grad()
+        v_loss.backward()
+        train_v.step()
+
+    # Capture changes from update
+    _, logp, _, v = actor_critic(obs, act)
+    pi_l_new = -(logp * adv).mean()
+    v_l_new = F.mse_loss(v.squeeze(), ret)
+    kl = (logp_old - logp).mean()
+    writer.add_scalar("pi_loss/train", pi_loss, epoch)
+    writer.add_scalar("vf_loss/train", v_loss, epoch)
+    writer.add_scalar("kl/train", kl, epoch)
+    writer.add_scalar("ent/train", ent, epoch)
+    writer.add_scalar("delta_pi/train", (pi_l_new - pi_loss), epoch)
+
+
+o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
+
+# Training loop
+for epoch in range(args.epochs):
+    actor_critic.eval()
+    ep_ret_lst, ep_len_lst = [], []
+    for t in range(args.steps_per_epoch):
+        a, _, logp_t, v_t = actor_critic(o.unsqueeze(0).to(device))
+        buf.store(
+            o, a.cpu().detach().numpy(), r, v_t.item(), logp_t.cpu().detach().numpy()
+        )
+        action = a.cpu().detach().numpy()[0]
+        o, r, d, _ = env.step(action)
+        ep_ret += r
+        ep_len += 1
+
+        terminal = d or (ep_len == args.max_ep_length)
+        if terminal or (t == args.steps_per_epoch - 1):
+            if not (terminal):
+                print("Warning: trajectory cut off by epoch at %d steps." % ep_len)
+            # if trajectory didn't reach terminal state, bootstrap value target
+            last_val = (
+                r
+                if d
+                else actor_critic.value_function(o.unsqueeze(0).to(device)).item()
+            )
+            buf.finish_path(last_val)
+            ep_len_lst.append(ep_len)
+            ep_ret_lst.append(ep_ret)
+            o, r, d, ep_ret, ep_len = env.reset(), 0, False, 0, 0
+
+    writer.add_scalar("ep_ret_mean/train", mean(ep_ret_lst), epoch)
+    writer.add_scalar("ep_len_mean/train", mean(ep_len_lst), epoch)
+    writer.add_scalar("ep_ret_var/train", variance(ep_ret_lst), epoch)
+    writer.add_scalar("ep_len_var/train", variance(ep_len_lst), epoch)
+    actor_critic.train()
+
+    update(epoch)
+
+    if epoch % args.save_every == 0 or epoch == args.epochs - 1:
+        save_checkpoint({"env": args.gym_env}, actor_critic, args.save_dir, epoch)
