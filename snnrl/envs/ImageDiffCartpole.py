@@ -87,6 +87,7 @@ class ImageDiffCartPoleEnv(gym.Env):
 
         self.seed()
         self.viewer = None
+        self.visibility = True
         self.state = None
 
         self.steps_beyond_done = None
@@ -98,6 +99,11 @@ class ImageDiffCartPoleEnv(gym.Env):
                 T.ToTensor(),
             ]
         )
+
+    def set_visibility(self, visibility):
+        if self.viewer:
+            self.viewer.window.set_visible(visible=visibility)
+        self.visibility = visibility
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -181,6 +187,7 @@ class ImageDiffCartPoleEnv(gym.Env):
             from gym.envs.classic_control import rendering
 
             self.viewer = rendering.Viewer(screen_width, screen_height)
+            self.viewer.window.set_visible(visible=self.visibility)
             l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
             axleoffset = cartheight / 4.0
             cart = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])

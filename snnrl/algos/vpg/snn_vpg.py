@@ -81,6 +81,13 @@ parser.add_argument(
     "--gae_lam", type=float, help="Lambda for GAE-lambda.", required=True
 )
 
+parser.add_argument(
+    "--show_env",
+    type=str,
+    help="Whether to show the model training window.",
+    required=True,
+)
+
 args = parser.parse_args(sys.argv[1:])
 
 with open(args.snn_config) as f:
@@ -90,6 +97,8 @@ with open(args.snn_config) as f:
 writer = SummaryWriter(".")
 device = torch.device(args.device)
 env = gym.make(args.gym_env)
+if args.show_env == "no":
+    env.set_visibility(False)
 env.reset()
 screen = env.get_screen()
 _, screen_height, screen_width = screen.shape

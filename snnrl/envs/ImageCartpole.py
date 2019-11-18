@@ -65,6 +65,7 @@ class ImageCartPoleEnv(gym.Env):
         self.force_mag = 10.0
         self.tau = 0.02  # seconds between state updates
         self.kinematics_integrator = "euler"
+        self.visibility = True
 
         # Angle at which to fail the episode
         self.theta_threshold_radians = 12 * 2 * math.pi / 360
@@ -98,6 +99,11 @@ class ImageCartPoleEnv(gym.Env):
                 T.ToTensor(),
             ]
         )
+
+    def set_visibility(self, visibility):
+        if self.viewer:
+            self.viewer.window.set_visible(visible=visibility)
+        self.visibility = visibility
 
     def seed(self, seed=None):
         self.np_random, seed = seeding.np_random(seed)
@@ -177,6 +183,7 @@ class ImageCartPoleEnv(gym.Env):
             from gym.envs.classic_control import rendering
 
             self.viewer = rendering.Viewer(screen_width, screen_height)
+            self.viewer.window.set_visible(visible=self.visibility)
             l, r, t, b = -cartwidth / 2, cartwidth / 2, cartheight / 2, -cartheight / 2
             axleoffset = cartheight / 4.0
             cart = rendering.FilledPolygon([(l, b), (l, t), (r, t), (r, b)])
