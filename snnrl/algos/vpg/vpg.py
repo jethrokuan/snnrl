@@ -108,7 +108,7 @@ if args.show_env == "no":
     env.set_visibility(False)
 env.reset()
 screen = env.get_screen()
-_, screen_height, screen_width = screen.shape
+screen_height, screen_width = screen.shape
 frame_history = 4
 
 obs_dim = screen.shape
