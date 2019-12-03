@@ -14,7 +14,7 @@ class CategoricalPolicy(torch.nn.Module):
             )
         elif model == "CNN":
             self.logits = CNN(
-                input_size[0], input_size[1], action_dim)
+                input_size[0], input_size[1], input_size[2], action_dim)
         else:
             raise Exception(f"Invalid model type: {model}")
 
