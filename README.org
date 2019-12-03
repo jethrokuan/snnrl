@@ -1,0 +1,8 @@
+* Connecting
+#+begin_src bash
+  ssh -L 5901:localhost:5901 -C -N -l jethro crslabserver1.d1.comp.nus.edu.sg
+#+end_src
+
+#+begin_src bash
+  vncviewer localhost:5901
+#+end_src
