@@ -106,12 +106,12 @@ device = torch.device(args.device)
 env = gym.make(args.gym_env)
 if args.show_env == "no":
     env.set_visibility(False)
-env.reset()
+o = env.reset()
 screen = env.get_screen()
-screen_height, screen_width = screen.shape
+_, screen_height, screen_width = screen.shape
 frame_history = 4
 
-obs_dim = screen.shape
+obs_dim = o.shape
 act_dim = env.action_space.shape
 
 actor_critic = ActorCritic(
