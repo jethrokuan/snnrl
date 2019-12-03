@@ -12,6 +12,7 @@ from gym.utils import seeding
 from PIL import Image
 import numpy as np
 import torchvision.transforms as T
+from snnrl.envs.History import History
 from snnrl.utils import Invert
 
 
@@ -66,6 +67,8 @@ class ImageCartPoleEnv(gym.Env):
         self.tau = 0.02  # seconds between state updates
         self.kinematics_integrator = "euler"
         self.visibility = True
+        self.frame_history = 4
+        self.history = History(self.frame_history)
 
         # Angle at which to fail the episode
         self.theta_threshold_radians = 12 * 2 * math.pi / 360
@@ -91,10 +94,11 @@ class ImageCartPoleEnv(gym.Env):
         self.state = None
 
         self.steps_beyond_done = None
-        self.resize = T.Compose(
+        self.preprocess = T.Compose(
             [
                 T.ToPILImage(),
                 T.Resize(40, interpolation=Image.CUBIC),
+                T.Grayscale(),
                 Invert(),
                 T.ToTensor(),
             ]
@@ -160,12 +164,15 @@ class ImageCartPoleEnv(gym.Env):
             self.steps_beyond_done += 1
             reward = 0.0
 
-        return self.get_screen(), reward, done, {}
+        self.history.put(self.get_screen())
+        return torch.stack(self.history.get(), -1), reward, done, {}
 
     def reset(self):
         self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
         self.steps_beyond_done = None
-        return self.get_screen()
+        self.history = History(self.frame_history)
+        self.history.put(self.get_screen())
+        return torch.stack(self.history.get(), -1)
 
     def render(self, mode="human"):
         screen_width = 600
@@ -266,4 +273,4 @@ class ImageCartPoleEnv(gym.Env):
         # (this doesn't require a copy)
         screen = np.ascontiguousarray(screen, dtype=np.float32) / 255
         screen = torch.from_numpy(screen)
-        return self.resize(screen)
+        return self.preprocess(screen)
