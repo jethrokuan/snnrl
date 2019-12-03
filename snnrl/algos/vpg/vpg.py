@@ -109,15 +109,16 @@ if args.show_env == "no":
 env.reset()
 screen = env.get_screen()
 _, screen_height, screen_width = screen.shape
+frame_history = 4
 
 obs_dim = screen.shape
 act_dim = env.action_space.shape
 
 actor_critic = ActorCritic(
     policy=CategoricalPolicy(
-        (screen_height, screen_width), policy_hidden, env.action_space.n, model="CNN"
+        (screen_height, screen_width, frame_history), policy_hidden, env.action_space.n, model="CNN"
     ),
-    value_function=CNN(screen_height, screen_width, 1),
+    value_function=CNN(screen_height, screen_width, frame_history, 1),
 )
 
 actor_critic.to(device=device)
