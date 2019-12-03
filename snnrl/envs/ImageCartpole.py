@@ -165,14 +165,14 @@ class ImageCartPoleEnv(gym.Env):
             reward = 0.0
 
         self.history.put(self.get_screen())
-        return torch.stack(self.history.get(), -1), reward, done, {}
+        return torch.stack(self.history.get(), 0), reward, done, {}
 
     def reset(self):
         self.state = self.np_random.uniform(low=-0.05, high=0.05, size=(4,))
         self.steps_beyond_done = None
         self.history = History(self.frame_history)
         self.history.put(self.get_screen())
-        return torch.stack(self.history.get(), -1)
+        return torch.stack(self.history.get(), 0)
 
     def render(self, mode="human"):
         screen_width = 600
@@ -273,4 +273,5 @@ class ImageCartPoleEnv(gym.Env):
         # (this doesn't require a copy)
         screen = np.ascontiguousarray(screen, dtype=np.float32) / 255
         screen = torch.from_numpy(screen)
-        return self.preprocess(screen)
+        processed = self.preprocess(screen)
+        return processed.squeeze(0) # H x W
