@@ -59,9 +59,9 @@
         gym_env:
           default: "ImageCartPole-v0"
         epochs:
-          default: 50
+          default: 500
         steps_per_epoch:
-          default: 4000
+          default: 1000
         max_ep_length:
           default: 1000
         policy_lr:
