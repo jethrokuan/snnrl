@@ -8,5 +8,5 @@
     "tauRho": 1,
     "scaleRho": 1
   },
-  "simulation": {"Ts": 1.0, "tSample": 50, "nSample": 1}
+  "simulation": {"Ts": 1.0, "tSample": 30, "nSample": 1}
 }
