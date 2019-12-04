@@ -99,7 +99,7 @@ device = torch.device(args.device)
 env = gym.make(args.gym_env)
 if args.show_env == "no":
     env.set_visibility(False)
-env.reset()
+o = env.reset()
 screen = env.get_screen()
 _, screen_height, screen_width = o.shape
 frame_history = 4

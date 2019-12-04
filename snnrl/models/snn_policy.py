@@ -38,27 +38,3 @@ class SNNCategoricalPolicy(torch.nn.Module):
             logp = None
 
         return pi, logp, logp_pi
-
-
-if __name__ == "__main__":
-    import gym
-
-    env = gym.make("ImageCartPole-v0")
-    obs = env.reset()
-    device = torch.device("cuda")
-    params = {
-        "neuron": {
-            "type": "SRMALPHA",
-            "theta": 10,
-            "tauSr": 10.0,
-            "tauRef": 1.0,
-            "scaleRef": 2,
-            "tauRho": 1,
-            "scaleRho": 1,
-        },
-        "simulation": {"Ts": 1.0, "tSample": 300, "nSample": 1},
-    }
-    net = SNNCategoricalPolicy(params).to(device=device)
-    input = torch.Tensor(obs.reshape(1, -1)).to(device=device)
-    output = net(input)
-    print(output)
