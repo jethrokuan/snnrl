@@ -43,7 +43,7 @@ class SNNCategoricalPolicy(torch.nn.Module):
 if __name__ == "__main__":
     import gym
 
-    env = gym.make("CartPole-v0")
+    env = gym.make("ImageCartPole-v0")
     obs = env.reset()
     device = torch.device("cuda")
     params = {
