@@ -11,7 +11,7 @@ class SNNCategoricalPolicy(torch.nn.Module):
         self.slayer = snn.layer(params["neuron"], params["simulation"])
         # self.encoder = CartPoleEncoder(200)
         self.encoder = ImageEncoder()
-        self.fc1 = self.slayer.dense((input_size[0] * input_size[1] * 3), 50)
+        self.fc1 = self.slayer.dense((input_size[0] * input_size[1] * input_size[2]), 50)
         self.fc2 = self.slayer.dense(50, 2)  # output of 2 classes
 
     def _encode(self, o, ts):
