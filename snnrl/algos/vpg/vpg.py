@@ -135,7 +135,6 @@ def update(epoch):
     _, logp, _ = actor_critic.policy(obs, act)
     ent = (-logp).mean()
 
-    pi_loss = -(logp).mean()
     pi_loss = (-logp * adv).mean()
 
     train_pi.zero_grad()
